@@ -48,25 +48,21 @@ def update_app_attributes(app_dir, config, app_icon_name):
     webview_url = config['webview_url']
 
     # Update Java package structure
+
+    # Determine the path to the old directory
     old_java_dir_parts = ["app", "src", "main", "java"] + ["com", "taigameiolinehub", "taigameiolinehub"]
     old_java_dir = os.path.join(app_dir, *old_java_dir_parts)
-    
+
+    # Determine the path to the new directory
     new_java_dir_parts = ["app", "src", "main", "java"] + package_name.split('.')
     new_java_dir = os.path.join(app_dir, *new_java_dir_parts)
-    
-    # Create intermediate directories if they don't exist
-    intermediate_dir = os.path.join(app_dir, "app", "src", "main", "java")
-    for part in package_name.split('.'):
-        intermediate_dir = os.path.join(intermediate_dir, part)
-        if not os.path.exists(intermediate_dir):
-            os.mkdir(intermediate_dir)
 
-    # Move the contents of the old directory to the new directory
-    for item in os.listdir(old_java_dir):
-        shutil.move(os.path.join(old_java_dir, item), new_java_dir)
+    # Check if the new directory already exists
+    if os.path.exists(new_java_dir):
+        shutil.rmtree(new_java_dir)  # Remove the existing directory
 
-     # Remove the old directory structure
-    shutil.rmtree(os.path.join(app_dir, "app", "src", "main", "java", "com", "taigameiolinehub"))    
+    #Now, rename the old directory to the new directory
+    os.rename(old_java_dir, new_java_dir)
 
     # Update AndroidManifest.xml
     manifest_path = os.path.join(app_dir, "app\\src\\main\\AndroidManifest.xml")
@@ -79,11 +75,16 @@ def update_app_attributes(app_dir, config, app_icon_name):
 
     # Update MainActivity.kt
     main_activity_path = os.path.join(new_java_dir, "MainActivity.kt")
-    with open(main_activity_path, 'r') as file:
-        main_activity_data = file.read()
-    main_activity_data = main_activity_data.replace('https://taigameionline.vn/', webview_url)
-    with open(main_activity_path, 'w') as file:
-        file.write(main_activity_data)
+    if os.path.exists(main_activity_path):
+        with open(main_activity_path, 'r') as file:
+            main_activity_data = file.read()
+            main_activity_data = main_activity_data.replace('https://taigameionline.vn/', webview_url)
+            main_activity_data = main_activity_data.replace('com.taigameiolinehub.taigameiolinehub', package_name)
+        with open(main_activity_path, 'w') as file:
+            file.write(main_activity_data)
+    else:
+        print(f"MainActivity.kt not found at {main_activity_path}")
+
 
     # Update build.gradle.kts
     build_gradle_path = os.path.join(app_dir, "app\\build.gradle.kts")
@@ -123,6 +124,13 @@ def handle_app_resources(app_dir, app_icon):
     if os.path.exists(old_icon_path):
         os.remove(old_icon_path)
 
+    # Load signing configuration
+with open('signing_config.json', 'r') as file:
+    signing_config_data = json.load(file)
+
+KEYSTORE_PATH = signing_config_data['keystorePath']
+KEY_ALIAS = signing_config_data['keyAlias']    
+
 def ensure_directory_exists(directory):
     if not os.path.exists(directory):
         os.makedirs(directory)        
@@ -139,51 +147,51 @@ def rebuild_project(app_dir):
     os.chdir(app_dir)
     os.system('gradlew build')
 
-def generate_encrypted_key(app_name, app_dir):
-    ensure_directory_exists(f"{app_dir}/abb_and_apk_release_bundle/keys/")
-    keytool_command = f'''
-    keytool -genkeypair -v -keystore {app_dir}/abb_and_apk_release_bundle/keys/{app_name}.jks 
-    -keyalg RSA -keysize 2048 -validity 10000 
-    -alias {app_name} 
-    -storepass 123456 
-    -keypass 123456 
-    -dname "CN=Ahsan, O=Ahsan"
-    '''
-    os.system(keytool_command)
+# Centralized keystore path
+KEYSTORE_PATH = "D:\\Ahsan Ghaffar\\Testing\\BaseAndroidApp\\keys\\centralized_keystore.jks"
 
-def build_and_compile(app_dir, app_name):
-    os.chdir(app_dir)
-    
-    # Modify build.gradle.kts to include signingConfig for release
-    build_gradle_path = os.path.join(app_dir, "app\\build.gradle.kts")
-    signing_config = f'''
-    signingConfigs {{
-        release {{
-            storeFile file('{app_dir}/abb_and_apk_release_bundle/keys/{app_name}.jks')
-            storePassword '123456'
-            keyAlias '{app_name}'
-            keyPassword '123456'
-        }}
-    }}
-    '''
-    with open(build_gradle_path, 'a') as file:
-        file.write(signing_config)
-    
-    # Build APK and AAB with the signing config
-    os.system('gradlew assembleRelease')  # Build APK
-    os.system('gradlew bundleRelease')    # Build AAB
+# def get_password(prompt_text):
+#     """Prompt the user to enter a password without echoing."""
+#     import getpass
+#     return getpass.getpass(prompt_text)
 
-def move_bundles(app_name, app_dir):
-    ensure_directory_exists(f"{app_dir}/abb_and_apk_release_bundle/abb_bundle/")
-    ensure_directory_exists(f"{app_dir}/abb_and_apk_release_bundle/apk_bundle/")
+# def build_and_compile(app_dir, app_name):
+#     os.chdir(app_dir)
     
-    source_aab_path = f"{app_dir}/app/build/outputs/bundle/release/{app_name}.aab"
-    destination_aab_path = f"{app_dir}/abb_and_apk_release_bundle/abb_bundle/{app_name}.aab"
-    shutil.move(source_aab_path, destination_aab_path)
+#     # Get keystore passwords from the user
+#     store_password = get_password(f"Enter the store password for {app_name}: ")
+#     key_password = get_password(f"Enter the key password for {app_name}: ")
+
+#     # Modify build.gradle.kts to include signingConfig for release
+#     build_gradle_path = os.path.join(app_dir, "app\\build.gradle.kts")
+#     signing_config = f'''
+#     signingConfigs {{
+#         release {{
+#             storeFile file('{KEYSTORE_PATH}')
+#             storePassword '{store_password}'
+#             keyAlias '{app_name}'
+#             keyPassword '{key_password}'
+#         }}
+#     }}
+#     '''
+#     with open(build_gradle_path, 'a') as file:
+#         file.write(signing_config)
     
-    source_apk_path = f"{app_dir}/app/build/outputs/apk/release/{app_name}.apk"
-    destination_apk_path = f"{app_dir}/abb_and_apk_release_bundle/apk_bundle/{app_name}.apk"
-    shutil.move(source_apk_path, destination_apk_path)
+#     # Build APK and AAB with the signing config
+#     os.system('gradlew assembleRelease')  # Build APK
+#     os.system('gradlew bundleRelease')    # Build AAB
+
+# def move_bundles(app_name, app_dir):
+#     ensure_directory_exists(f"{app_dir}/abb_and_apk_release_bundle/abb_bundle/")
+#     ensure_directory_exists(f"{app_dir}/abb_and_apk_release_bundle/apk_bundle/")
+    
+#     source_aab_path = f"{app_dir}/app/build/outputs/bundle/release/{app_name}.aab"
+#     destination_aab_path = f"{app_dir}/abb_and_apk_release_bundle/abb_bundle/{app_name}.aab"
+#     shutil.move(source_aab_path, destination_aab_path)
+    
+#     source_apk_path = f"{app_dir}/app/build/outputs/apk/release/{app_name}.apk"
+#     destination_apk_path = f"{app_dir}/abb_and_apk_release_bundle/apk_bundle/{app_name}.apk"
+#     shutil.move(source_apk_path, destination_apk_path)
 
 
 def main():
@@ -203,9 +211,9 @@ def main():
         clean_project(app_dir)
         rebuild_project(app_dir)
 
-        generate_encrypted_key(app_name, app_dir)
-        build_and_compile(app_dir, app_name)
-        move_bundles(app_name, app_dir)
+        # Removed generate_encrypted_key as we're using a centralized keystore
+        # build_and_compile(app_dir, app_name)
+        # move_bundles(app_name, app_dir)
 
 if __name__ == '__main__':
     main()
